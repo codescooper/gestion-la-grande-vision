@@ -3347,8 +3347,8 @@
     const BACKUP_FORMAT = 'lgv-backup';
     const BACKUP_VERSION = 1;
 
-    function exportData() {
-      const payload = {
+    function buildBackupPayload() {
+      return {
         format: BACKUP_FORMAT,
         version: BACKUP_VERSION,
         exported_at: new Date().toISOString(),
@@ -3359,18 +3359,41 @@
           settings: settings
         }
       };
+    }
+
+    function downloadBackup(payload, filename) {
       const json = JSON.stringify(payload, null, 2);
       const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
-      const today = new Date().toISOString().split('T')[0];
       const a = document.createElement('a');
       a.href = url;
-      a.download = `sauvegarde-grande-vision-${today}.json`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+      localStorage.setItem('lgv_last_backup', new Date().toISOString());
+    }
+
+    function exportData() {
+      const today = new Date().toISOString().split('T')[0];
+      downloadBackup(buildBackupPayload(), `sauvegarde-grande-vision-${today}.json`);
       toast('Sauvegarde exportée');
+    }
+
+    function migrateBackup(parsed) {
+      const s = parsed.data.settings;
+      if (s && typeof s === 'object') {
+        if (!s.prices) s.prices = JSON.parse(JSON.stringify(DEFAULT_PRICES));
+        for (const g in DEFAULT_PRICES) {
+          if (!s.prices[g]) s.prices[g] = {};
+          for (const k in DEFAULT_PRICES[g]) {
+            if (typeof s.prices[g][k] !== 'number') s.prices[g][k] = DEFAULT_PRICES[g][k];
+          }
+        }
+        if (!Array.isArray(s.insurances)) s.insurances = [];
+      }
+      return parsed;
     }
 
     function importData(input) {
@@ -3400,15 +3423,23 @@
           return;
         }
 
-        const dateLabel = parsed.exported_at ? fmtDate(parsed.exported_at) : 'inconnue';
+        const dateLabel2 = parsed.exported_at ? fmtDate(parsed.exported_at) : 'inconnue';
         const ok = confirm(
-          `Importer cette sauvegarde du ${dateLabel} ?\n\n` +
+          `Importer cette sauvegarde du ${dateLabel2} ?\n\n` +
           `• ${d.clients.length} client(s)\n` +
           `• ${d.prescriptions.length} prescription(s)\n` +
           `• ${d.factures.length} facture(s)\n\n` +
-          `⚠ Toutes les données actuelles seront définitivement remplacées.`
+          `⚠ Toutes les données actuelles seront définitivement remplacées.\n` +
+          `Une sauvegarde de sécurité de vos données actuelles va d'abord être téléchargée.`
         );
         if (!ok) { input.value = ''; return; }
+
+        // Sauvegarde de sécurité AVANT écrasement
+        const today2 = new Date().toISOString().split('T')[0];
+        downloadBackup(buildBackupPayload(), `securite-avant-import-${today2}.json`);
+
+        // Migration ascendante du fichier importé
+        migrateBackup(parsed);
 
         clients = d.clients;
         prescriptions = d.prescriptions;
@@ -3419,8 +3450,6 @@
 
         if (d.settings && typeof d.settings === 'object') {
           settings = d.settings;
-          if (!settings.prices) settings.prices = JSON.parse(JSON.stringify(DEFAULT_PRICES));
-          if (!Array.isArray(settings.insurances)) settings.insurances = [];
           saveSettings();
         }
 
