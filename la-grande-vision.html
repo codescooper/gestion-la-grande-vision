@@ -98,6 +98,22 @@
 
     .hidden { display: none !important; }
 
+    .backup-reminder {
+      display: flex; align-items: center; gap: 0.75rem;
+      background: rgba(240,182,90,.08);
+      border: 1px solid rgba(240,182,90,.45);
+      border-radius: var(--r-lg);
+      padding: 0.75rem 1rem; margin-bottom: 1.25rem;
+      color: var(--lgv-bone); font-size: 13px;
+    }
+    .backup-reminder i { color: var(--lgv-warning); flex-shrink: 0; }
+    .backup-reminder span { flex: 1; }
+    .backup-reminder-close {
+      background: none; border: none; color: var(--lgv-haze);
+      cursor: pointer; padding: 0.25rem; display: inline-flex;
+    }
+    .backup-reminder-close:hover { color: var(--lgv-bone); }
+
     /* ========================================================== */
     /* GLOWING RULE — brand signature                             */
     /* ========================================================== */
@@ -1640,6 +1656,7 @@
     </aside>
 
     <main class="main">
+      <div id="backupReminder" class="hidden"></div>
       <section id="page-dashboard" class="page">
         <div class="page-header">
           <div>
@@ -3252,6 +3269,7 @@
             (clients, prescriptions, factures et paramètres) pour la conserver en lieu sûr ou la transférer
             sur un autre poste.
             <br><span style="color:var(--lgv-haze);">État actuel : ${counts}</span>
+            <br><span style="color:var(--lgv-haze);">Dernière sauvegarde : ${localStorage.getItem('lgv_last_backup') ? fmtDate(localStorage.getItem('lgv_last_backup')) : 'jamais'}</span>
           </p>
           <div style="display:flex;flex-wrap:wrap;gap:.625rem;">
             <button class="btn btn-secondary" type="button" onclick="exportData()">
@@ -3382,6 +3400,34 @@
     }
 
     // Migration ascendante : complète parsed.data.settings en place (et renvoie parsed).
+    let backupReminderDismissed = false;
+
+    function checkBackupReminder() {
+      const el = document.getElementById('backupReminder');
+      if (!el) return;
+      const hasData = clients.length || prescriptions.length || factures.length;
+      const last = localStorage.getItem('lgv_last_backup');
+      const stale = !last || (Date.now() - new Date(last).getTime()) > 7 * 24 * 60 * 60 * 1000;
+      if (backupReminderDismissed || !hasData || !stale) {
+        el.classList.add('hidden'); el.innerHTML = ''; return;
+      }
+      el.classList.remove('hidden');
+      el.className = 'backup-reminder';
+      el.innerHTML = `
+        <i data-lucide="shield-alert"></i>
+        <span>Pensez à exporter une sauvegarde de vos données${last ? ' — dernière : ' + fmtDate(last) : ' — aucune sauvegarde enregistrée'}.</span>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="exportData(); checkBackupReminder();">Exporter maintenant</button>
+        <button class="backup-reminder-close" type="button" title="Fermer" onclick="dismissBackupReminder()"><i data-lucide="x"></i></button>
+      `;
+      refreshIcons();
+    }
+
+    function dismissBackupReminder() {
+      backupReminderDismissed = true;
+      const el = document.getElementById('backupReminder');
+      if (el) { el.classList.add('hidden'); el.innerHTML = ''; }
+    }
+
     function migrateBackup(parsed) {
       const s = parsed && parsed.data && parsed.data.settings;
       if (s && typeof s === 'object') {
@@ -4247,6 +4293,7 @@
     // ========== INIT ==========
     updateOnlineStatus();
     renderDashboard();
+    checkBackupReminder();
     refreshIcons();
   </script>
 </body>
