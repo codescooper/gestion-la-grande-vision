@@ -3845,12 +3845,84 @@
     }
 
     // STUBS TEMPORAIRES (remplacés par les tâches 5-8)
-    function consultStep1() { return '<div class="card">Étape 1 (stub)</div>'; }
-    function consultStep2() { return '<div class="card">Étape 2 (stub)</div>'; }
+    function consultStep1() {
+      const c = consultation;
+      const opts = clients.slice()
+        .sort((a, b) => (a.nom || '').localeCompare(b.nom || ''))
+        .map(cl => `<option value="${cl.id}" ${c.clientId === cl.id ? 'selected' : ''}>${escapeHtml(cl.nom)} ${escapeHtml(cl.prenom || '')}</option>`).join('');
+      return `
+        <div class="card">
+          <div class="card-header"><h3>Étape 1 — Client</h3></div>
+          <div class="pill-select" style="margin-bottom:1rem;">
+            <button type="button" class="pill-opt ${c.clientMode === 'existing' ? 'active' : ''}" onclick="setConsultClientMode('existing')">Client existant</button>
+            <button type="button" class="pill-opt ${c.clientMode === 'new' ? 'active' : ''}" onclick="setConsultClientMode('new')">Nouveau client</button>
+          </div>
+          ${c.clientMode === 'existing' ? `
+            <div class="form-group">
+              <label>Sélectionner un client <span class="req">*</span></label>
+              <select id="cons_client">
+                <option value="">— Sélectionner —</option>
+                ${opts}
+              </select>
+            </div>
+          ` : `
+            <div class="form-grid">
+              <div class="form-group"><label>Nom <span class="req">*</span></label><input type="text" id="cons_c_nom" value="${escapeHtml(c.newClient.nom)}" placeholder="OUATTARA"></div>
+              <div class="form-group"><label>Prénom</label><input type="text" id="cons_c_prenom" value="${escapeHtml(c.newClient.prenom)}" placeholder="Drissa"></div>
+            </div>
+            <div class="form-grid">
+              <div class="form-group"><label>Téléphone</label><input type="text" id="cons_c_telephone" value="${escapeHtml(c.newClient.telephone)}" placeholder="+225 07 00 00 00 00"></div>
+              <div class="form-group"><label>Email</label><input type="email" id="cons_c_email" value="${escapeHtml(c.newClient.email)}" placeholder="exemple@email.com"></div>
+            </div>
+            <div class="form-group"><label>Date de naissance</label><input type="date" id="cons_c_naissance" value="${escapeHtml(c.newClient.date_naissance)}"></div>
+            <div class="form-group"><label>Notes</label><textarea id="cons_c_notes" placeholder="Notes sur le client...">${escapeHtml(c.newClient.notes)}</textarea></div>
+          `}
+        </div>
+      `;
+    }
+    function consultStep2() {
+      const p = consultation.presc;
+      return `
+        <div class="card">
+          <div class="card-header"><h3>Étape 2 — Prescription <span style="color:var(--lgv-haze);font-weight:400;font-size:12px;">(optionnelle)</span></h3></div>
+          <div class="form-group"><label>Date de consultation</label><input type="date" id="cons_p_date" value="${escapeHtml(p.date)}"></div>
+          <div class="form-group">
+            <label><span class="badge badge-blue-filled">OD — Œil droit</span></label>
+            <div class="form-grid-4">
+              <div><label>SPH</label><input type="text" id="cons_p_od_sph" value="${escapeHtml(p.od_sph)}" placeholder="-2.50"></div>
+              <div><label>CYL</label><input type="text" id="cons_p_od_cyl" value="${escapeHtml(p.od_cyl)}" placeholder="+0.50"></div>
+              <div><label>AXE</label><input type="text" id="cons_p_od_axe" value="${escapeHtml(p.od_axe)}" placeholder="145"></div>
+              <div><label>ADD</label><input type="text" id="cons_p_od_add" value="${escapeHtml(p.od_add)}" placeholder="+1.50"></div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label><span class="badge badge-blue">OG — Œil gauche</span></label>
+            <div class="form-grid-4">
+              <div><label>SPH</label><input type="text" id="cons_p_og_sph" value="${escapeHtml(p.og_sph)}" placeholder="-2.25"></div>
+              <div><label>CYL</label><input type="text" id="cons_p_og_cyl" value="${escapeHtml(p.og_cyl)}" placeholder="+0.50"></div>
+              <div><label>AXE</label><input type="text" id="cons_p_og_axe" value="${escapeHtml(p.og_axe)}" placeholder="35"></div>
+              <div><label>ADD</label><input type="text" id="cons_p_og_add" value="${escapeHtml(p.og_add)}" placeholder="+1.50"></div>
+            </div>
+          </div>
+          <div class="form-group"><label>Type de correction</label>${chipGroupHtml('type_verre', false)}</div>
+          <div class="form-grid">
+            <div class="form-group"><label>Matériau</label>${chipGroupHtml('materiau', false)}</div>
+            <div class="form-group"><label>Teinte</label>${chipGroupHtml('coloration', false)}</div>
+          </div>
+          <div class="form-group"><label>Traitements</label>${chipGroupHtml('traitements', true)}</div>
+          <div class="form-group"><label>Autres précisions / valeurs personnalisées</label><textarea id="cons_p_specs_libres" placeholder="Ex : verre haute définition, traitement hydrophobe...">${escapeHtml(p.specs_libres)}</textarea></div>
+          <div class="form-group"><label>Notes</label><textarea id="cons_p_notes" placeholder="Notes sur la prescription...">${escapeHtml(p.notes)}</textarea></div>
+        </div>
+      `;
+    }
     function consultStep3() { return '<div class="card"><select id="f_assurance"></select><div id="lignesContainer"></div><div id="totalDisplay"></div><div id="assuranceBreakdown" class="hidden"></div></div>'; }
     function consultStep4() { return '<div class="card">Étape 4 (stub)</div>'; }
     function consultStep5() { return '<div class="card">Étape 5 (stub)</div>'; }
-    function setConsultClientMode(m) { consultation.clientMode = m; renderConsultStep(); }
+    function setConsultClientMode(mode) {
+      captureConsultStep(1);
+      consultation.clientMode = mode;
+      renderConsultStep();
+    }
     function importLignesFromDraftPrescription() { toast('stub'); }
     function finalizeConsultation() { toast('stub finalize'); }
 
