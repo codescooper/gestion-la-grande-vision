@@ -114,6 +114,28 @@
     }
     .backup-reminder-close:hover { color: var(--lgv-bone); }
 
+    /* ===== Wizard consultation ===== */
+    .consult-stepper { display: flex; align-items: center; gap: 0; margin-bottom: 0.5rem; flex-wrap: wrap; }
+    .consult-step { display: flex; align-items: center; gap: 0.5rem; opacity: 0.5; }
+    .consult-step.active, .consult-step.done { opacity: 1; }
+    .consult-step .cs-num {
+      width: 26px; height: 26px; border-radius: 999px; display: inline-flex;
+      align-items: center; justify-content: center; font-family: var(--lgv-font-mono);
+      font-size: 12px; border: 1px solid var(--lgv-veil); color: var(--lgv-mist);
+    }
+    .consult-step.active .cs-num { background: var(--lgv-grad-blue); color: #fff; border-color: transparent; box-shadow: var(--lgv-glow-blue); }
+    .consult-step.done .cs-num { border-color: var(--lgv-blue); color: var(--lgv-blue); }
+    .consult-step .cs-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; }
+    .cs-sep { flex: 1; min-width: 16px; height: 1px; background: var(--lgv-veil); margin: 0 0.5rem; }
+    .consult-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 1.25rem; gap: 1rem; }
+    .consult-toggle { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 14px; }
+    .consult-toggle input { width: auto; }
+    .recap-row { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--lgv-veil); gap: 1rem; }
+    .recap-row:last-child { border-bottom: none; }
+    .recap-table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; }
+    .recap-table th, .recap-table td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--lgv-veil); font-size: 13px; }
+    .recap-table .numeric { text-align: right; font-family: var(--lgv-font-mono); }
+
     /* ========================================================== */
     /* GLOWING RULE — brand signature                             */
     /* ========================================================== */
@@ -1640,6 +1662,10 @@
           <i data-lucide="file-text"></i>
           Factures proforma
         </button>
+        <button class="nav-item" data-page="consultation" onclick="navTo('consultation')">
+          <i data-lucide="clipboard-list"></i>
+          Consultation
+        </button>
         <div class="nav-section-label">Configuration</div>
         <button class="nav-item" data-page="settings" onclick="navTo('settings')">
           <i data-lucide="settings"></i>
@@ -1664,10 +1690,16 @@
             <h2 class="page-title">Tableau de <span class="blue">bord</span></h2>
             <p class="page-sub">Vue d'ensemble de votre activité</p>
           </div>
-          <button class="btn btn-primary" onclick="openModal('client')">
-            <i data-lucide="plus"></i>
-            Nouveau client
-          </button>
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+            <button class="btn btn-secondary" onclick="openModal('client')">
+              <i data-lucide="plus"></i>
+              Nouveau client
+            </button>
+            <button class="btn btn-primary" onclick="startConsultation()">
+              <i data-lucide="clipboard-list"></i>
+              Nouvelle consultation
+            </button>
+          </div>
         </div>
         <div class="glow-rule page-rule"></div>
         <div id="dashboardStats" class="stats-grid"></div>
@@ -1721,6 +1753,22 @@
           <i data-lucide="search" class="search-icon"></i>
         </div>
         <div id="facturesList"></div>
+      </section>
+
+      <section id="page-consultation" class="page hidden">
+        <div class="page-header">
+          <div>
+            <div class="eyebrow">Consultation</div>
+            <h2 class="page-title">Nouvelle <span class="blue">consultation</span></h2>
+            <p class="page-sub">Parcours guidé : client, prescription, devis, acompte, PDF</p>
+          </div>
+          <button class="btn btn-tertiary" onclick="cancelConsultation()">
+            <i data-lucide="x"></i>
+            Annuler la consultation
+          </button>
+        </div>
+        <div class="glow-rule page-rule"></div>
+        <div id="consultationContent"></div>
       </section>
 
       <section id="page-settings" class="page hidden">
@@ -2099,6 +2147,7 @@
       if (page === 'dashboard') renderDashboard();
       if (page === 'clients') renderClients();
       if (page === 'factures') renderFactures();
+      if (page === 'consultation') renderConsultation();
       if (page === 'settings') renderSettings();
     }
 
@@ -3644,6 +3693,173 @@
       renderLignes();
       toast(`${newLignes.length} ligne(s) importée(s)`);
     }
+
+    // ========== MODULE CONSULTATION (wizard) ==========
+    let consultation = null;
+
+    function todayISO() { return new Date().toISOString().slice(0, 10); }
+
+    function newConsultation() {
+      return {
+        step: 1,
+        clientMode: 'existing',
+        clientId: '',
+        newClient: { nom: '', prenom: '', telephone: '', email: '', date_naissance: '', notes: '' },
+        presc: {
+          date: todayISO(),
+          od_sph: '', od_cyl: '', od_axe: '', od_add: '',
+          og_sph: '', og_cyl: '', og_axe: '', og_add: '',
+          specs_libres: '', notes: ''
+        },
+        lignes: [],
+        assuranceId: '',
+        withVersement: false,
+        versement: { montant: '', date: todayISO(), mode: 'especes', reference: '', notes: '' }
+      };
+    }
+
+    const CONSULT_STEPS = ['Client', 'Prescription', 'Devis', 'Acompte', 'Récapitulatif'];
+
+    function startConsultation() { consultation = null; navTo('consultation'); }
+
+    function cancelConsultation() {
+      if (!confirm('Annuler cette consultation ? Les informations saisies seront perdues.')) return;
+      consultation = null;
+      navTo('dashboard');
+    }
+
+    function renderConsultation() {
+      if (!consultation) {
+        consultation = newConsultation();
+        currentPrescState = { type_verre: '', materiau: '', coloration: '', traitements: [] };
+      }
+      const container = document.getElementById('consultationContent');
+      container.innerHTML = `
+        <div class="consult-stepper">
+          ${CONSULT_STEPS.map((label, i) => {
+            const n = i + 1;
+            const cls = n === consultation.step ? 'active' : (n < consultation.step ? 'done' : '');
+            return `<div class="consult-step ${cls}"><span class="cs-num">${n < consultation.step ? '✓' : n}</span><span class="cs-label">${label}</span></div>`;
+          }).join('<div class="cs-sep"></div>')}
+        </div>
+        <div class="glow-rule page-rule"></div>
+        <div id="consultationBody"></div>
+        <div class="consult-footer">
+          ${consultation.step > 1
+            ? `<button class="btn btn-tertiary" type="button" onclick="goToConsultStep(${consultation.step - 1})"><i data-lucide="arrow-left"></i> Précédent</button>`
+            : '<span></span>'}
+          ${consultation.step < 5
+            ? `<button class="btn btn-primary" type="button" onclick="goToConsultStep(${consultation.step + 1})">Continuer <i data-lucide="arrow-right"></i></button>`
+            : `<button class="btn btn-primary" type="button" onclick="finalizeConsultation()"><i data-lucide="check"></i> Finaliser et générer le PDF</button>`}
+        </div>
+      `;
+      renderConsultStep();
+      refreshIcons();
+    }
+
+    function renderConsultStep() {
+      const body = document.getElementById('consultationBody');
+      if (!body) return;
+      const s = consultation.step;
+      if (s === 1) body.innerHTML = consultStep1();
+      else if (s === 2) body.innerHTML = consultStep2();
+      else if (s === 3) {
+        body.innerHTML = consultStep3();
+        factureLignes = (consultation.lignes && consultation.lignes.length)
+          ? JSON.parse(JSON.stringify(consultation.lignes))
+          : [{ designation: '', reference: '', type: 'monture', montant: 0 }];
+        renderLignes();
+      }
+      else if (s === 4) body.innerHTML = consultStep4();
+      else body.innerHTML = consultStep5();
+      refreshIcons();
+    }
+
+    function goToConsultStep(target) {
+      const current = consultation.step;
+      captureConsultStep(current);
+      if (target > current && !validateConsultStep(current)) return;
+      consultation.step = target;
+      renderConsultation();
+    }
+
+    function captureConsultStep(step) {
+      const c = consultation;
+      const g = id => (document.getElementById(id) ? document.getElementById(id).value : '');
+      if (step === 1) {
+        if (c.clientMode === 'existing') {
+          const sel = document.getElementById('cons_client');
+          if (sel) c.clientId = sel.value;
+        } else {
+          c.newClient = {
+            nom: g('cons_c_nom').trim(),
+            prenom: g('cons_c_prenom').trim(),
+            telephone: g('cons_c_telephone').trim(),
+            email: g('cons_c_email').trim(),
+            date_naissance: g('cons_c_naissance'),
+            notes: g('cons_c_notes').trim()
+          };
+        }
+      } else if (step === 2) {
+        c.presc = {
+          date: g('cons_p_date') || todayISO(),
+          od_sph: g('cons_p_od_sph').trim(), od_cyl: g('cons_p_od_cyl').trim(), od_axe: g('cons_p_od_axe').trim(), od_add: g('cons_p_od_add').trim(),
+          og_sph: g('cons_p_og_sph').trim(), og_cyl: g('cons_p_og_cyl').trim(), og_axe: g('cons_p_og_axe').trim(), og_add: g('cons_p_og_add').trim(),
+          specs_libres: g('cons_p_specs_libres').trim(), notes: g('cons_p_notes').trim()
+        };
+      } else if (step === 3) {
+        c.lignes = JSON.parse(JSON.stringify(factureLignes));
+        const sel = document.getElementById('f_assurance');
+        c.assuranceId = sel ? sel.value : '';
+      } else if (step === 4) {
+        const t = document.getElementById('cons_v_toggle');
+        c.withVersement = t ? t.checked : false;
+        if (c.withVersement) {
+          c.versement = {
+            montant: g('cons_v_montant'),
+            date: g('cons_v_date') || todayISO(),
+            mode: g('cons_v_mode') || 'especes',
+            reference: g('cons_v_reference').trim(),
+            notes: g('cons_v_notes').trim()
+          };
+        }
+      }
+    }
+
+    function validateConsultStep(step) {
+      const c = consultation;
+      if (step === 1) {
+        const hasDom = document.getElementById('cons_client') || document.getElementById('cons_c_nom');
+        if (hasDom) {
+          if (c.clientMode === 'existing' && !c.clientId) { toast('Sélectionnez un client', 'error'); return false; }
+          if (c.clientMode === 'new' && !c.newClient.nom) { toast('Le nom du client est obligatoire', 'error'); return false; }
+        }
+      }
+      if (step === 3) {
+        if (document.getElementById('lignesContainer')) {
+          const valid = factureLignes.filter(l => l.designation && l.designation.trim() && Number(l.montant) > 0);
+          if (valid.length === 0) { toast('Ajoutez au moins une ligne avec désignation et montant', 'error'); return false; }
+        }
+      }
+      if (step === 4) {
+        const t = document.getElementById('cons_v_toggle');
+        if (t && t.checked) {
+          const m = parseInt(document.getElementById('cons_v_montant').value, 10);
+          if (!m || m <= 0) { toast('Montant d\'acompte invalide', 'error'); return false; }
+        }
+      }
+      return true;
+    }
+
+    // STUBS TEMPORAIRES (remplacés par les tâches 5-8)
+    function consultStep1() { return '<div class="card">Étape 1 (stub)</div>'; }
+    function consultStep2() { return '<div class="card">Étape 2 (stub)</div>'; }
+    function consultStep3() { return '<div class="card"><select id="f_assurance"></select><div id="lignesContainer"></div><div id="totalDisplay"></div><div id="assuranceBreakdown" class="hidden"></div></div>'; }
+    function consultStep4() { return '<div class="card">Étape 4 (stub)</div>'; }
+    function consultStep5() { return '<div class="card">Étape 5 (stub)</div>'; }
+    function setConsultClientMode(m) { consultation.clientMode = m; renderConsultStep(); }
+    function importLignesFromDraftPrescription() { toast('stub'); }
+    function finalizeConsultation() { toast('stub finalize'); }
 
     // ========================================================== //
     // PDF GENERATION — LA GRANDE VISION (Nocturne · Bleu LGV)     //
