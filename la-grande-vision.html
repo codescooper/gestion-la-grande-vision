@@ -3456,8 +3456,6 @@
       toast('Sauvegarde exportée');
     }
 
-    // Migration ascendante : complète parsed.data.settings en place (et renvoie parsed).
-
     function checkBackupReminder() {
       const el = document.getElementById('backupReminder');
       if (!el) return;
@@ -3529,6 +3527,7 @@
       toast(`${rows.length} facture(s) exportée(s)`);
     }
 
+    // Migration ascendante : complète parsed.data.settings en place (et renvoie parsed).
     function migrateBackup(parsed) {
       const s = parsed && parsed.data && parsed.data.settings;
       if (s && typeof s === 'object') {
@@ -3709,6 +3708,7 @@
           date: todayISO(),
           od_sph: '', od_cyl: '', od_axe: '', od_add: '',
           og_sph: '', og_cyl: '', og_axe: '', og_add: '',
+          type_verre: '', materiau: '', coloration: '', traitements: [],
           specs_libres: '', notes: ''
         },
         lignes: [],
@@ -3761,7 +3761,15 @@
       if (!body) return;
       const s = consultation.step;
       if (s === 1) body.innerHTML = consultStep1();
-      else if (s === 2) body.innerHTML = consultStep2();
+      else if (s === 2) {
+        currentPrescState = {
+          type_verre: consultation.presc.type_verre || '',
+          materiau: consultation.presc.materiau || '',
+          coloration: consultation.presc.coloration || '',
+          traitements: Array.isArray(consultation.presc.traitements) ? [...consultation.presc.traitements] : []
+        };
+        body.innerHTML = consultStep2();
+      }
       else if (s === 3) {
         body.innerHTML = consultStep3();
         factureLignes = (consultation.lignes && consultation.lignes.length)
@@ -3804,6 +3812,10 @@
           date: g('cons_p_date') || todayISO(),
           od_sph: g('cons_p_od_sph').trim(), od_cyl: g('cons_p_od_cyl').trim(), od_axe: g('cons_p_od_axe').trim(), od_add: g('cons_p_od_add').trim(),
           og_sph: g('cons_p_og_sph').trim(), og_cyl: g('cons_p_og_cyl').trim(), og_axe: g('cons_p_og_axe').trim(), og_add: g('cons_p_og_add').trim(),
+          type_verre: currentPrescState.type_verre || '',
+          materiau: currentPrescState.materiau || '',
+          coloration: currentPrescState.coloration || '',
+          traitements: Array.isArray(currentPrescState.traitements) ? [...currentPrescState.traitements] : [],
           specs_libres: g('cons_p_specs_libres').trim(), notes: g('cons_p_notes').trim()
         };
       } else if (step === 3) {
@@ -3844,7 +3856,6 @@
       return true;
     }
 
-    // STUBS TEMPORAIRES (remplacés par les tâches 5-8)
     function consultStep1() {
       const c = consultation;
       const opts = clients.slice()
@@ -4035,10 +4046,10 @@
     }
     function importLignesFromDraftPrescription() {
       const p = {
-        type_verre: currentPrescState.type_verre,
-        materiau: currentPrescState.materiau,
-        coloration: currentPrescState.coloration,
-        traitements: currentPrescState.traitements || []
+        type_verre: consultation.presc.type_verre,
+        materiau: consultation.presc.materiau,
+        coloration: consultation.presc.coloration,
+        traitements: consultation.presc.traitements || []
       };
       const newLignes = [];
       [
@@ -4097,7 +4108,7 @@
 
       // --- 2. Prescription (uniquement si renseignée) ---
       const p = c.presc;
-      const cp = currentPrescState;
+      const cp = c.presc;
       const hasPresc =
         ['od_sph','od_cyl','od_axe','od_add','og_sph','og_cyl','og_axe','og_add','specs_libres'].some(k => (p[k] || '').trim())
         || cp.type_verre || cp.materiau || cp.coloration || (cp.traitements && cp.traitements.length);
