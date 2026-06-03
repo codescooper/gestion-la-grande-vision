@@ -3754,7 +3754,6 @@
         </div>
       `;
       renderConsultStep();
-      refreshIcons();
     }
 
     function renderConsultStep() {
@@ -3837,9 +3836,8 @@
         if (valid.length === 0) { toast('Ajoutez au moins une ligne avec désignation et montant', 'error'); return false; }
       }
       if (step === 4) {
-        const t = document.getElementById('cons_v_toggle');
-        if (t && t.checked) {
-          const m = parseInt(document.getElementById('cons_v_montant').value, 10);
+        if (c.withVersement) {
+          const m = parseInt(c.versement.montant, 10);
           if (!m || m <= 0) { toast('Montant d\'acompte invalide', 'error'); return false; }
         }
       }
