@@ -3703,7 +3703,7 @@
       return {
         step: 1,
         clientMode: 'existing',
-        clientId: '',
+        clientId: (clients.length === 1 ? clients[0].id : ''),
         newClient: { nom: '', prenom: '', telephone: '', email: '', date_naissance: '', notes: '' },
         presc: {
           date: todayISO(),
@@ -3915,7 +3915,47 @@
         </div>
       `;
     }
-    function consultStep3() { return '<div class="card"><select id="f_assurance"></select><div id="lignesContainer"></div><div id="totalDisplay"></div><div id="assuranceBreakdown" class="hidden"></div></div>'; }
+    function consultStep3() {
+      const insOpts = (settings.insurances || []).map(a =>
+        `<option value="${a.id}" data-nom="${escapeHtml(a.nom)}" data-pct="${a.couverture}" ${consultation.assuranceId === a.id ? 'selected' : ''}>${escapeHtml(a.nom)} · ${a.couverture}%</option>`
+      ).join('');
+      return `
+        <div class="card">
+          <div class="card-header">
+            <h3>Étape 3 — Devis</h3>
+            <button class="btn btn-secondary btn-sm" type="button" onclick="importLignesFromDraftPrescription()">
+              <i data-lucide="download"></i> Importer la prescription (tarifs auto)
+            </button>
+          </div>
+          <div class="form-group">
+            <label>Assurance</label>
+            <select id="f_assurance" onchange="updateAssuranceBreakdown()">
+              <option value="">— Aucune —</option>
+              ${insOpts}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Lignes de facture</label>
+            <div class="ligne-labels">
+              <label>Désignation</label>
+              <label>Référence</label>
+              <label>Type</label>
+              <label>Montant (FCFA)</label>
+              <label></label>
+            </div>
+            <div id="lignesContainer"></div>
+            <button class="btn btn-dashed btn-sm" type="button" onclick="addLigne()" style="margin-top:0.5rem;">
+              <i data-lucide="plus"></i> Ajouter une ligne
+            </button>
+          </div>
+          <div class="total-bar">
+            <div class="label">Total</div>
+            <div class="value" id="totalDisplay">0 FCFA</div>
+          </div>
+          <div id="assuranceBreakdown" class="hidden"></div>
+        </div>
+      `;
+    }
     function consultStep4() { return '<div class="card">Étape 4 (stub)</div>'; }
     function consultStep5() { return '<div class="card">Étape 5 (stub)</div>'; }
     function setConsultClientMode(mode) {
@@ -3923,7 +3963,36 @@
       consultation.clientMode = mode;
       renderConsultStep();
     }
-    function importLignesFromDraftPrescription() { toast('stub'); }
+    function importLignesFromDraftPrescription() {
+      const p = {
+        type_verre: currentPrescState.type_verre,
+        materiau: currentPrescState.materiau,
+        coloration: currentPrescState.coloration,
+        traitements: currentPrescState.traitements || []
+      };
+      const newLignes = [];
+      [
+        { field: 'type_verre', group: 'type_verre', type: 'verre' },
+        { field: 'materiau',   group: 'materiau',   type: 'verre' },
+        { field: 'coloration', group: 'coloration', type: 'traitement' }
+      ].forEach(({ field, group, type }) => {
+        const value = p[field];
+        if (!value) return;
+        const price = getPrice(group, value);
+        if (price <= 0) return;
+        newLignes.push({ designation: prescLabel(group, value).toUpperCase(), reference: '', type, montant: price });
+      });
+      (p.traitements || []).forEach(t => {
+        const price = getPrice('traitements', t);
+        if (price <= 0) return;
+        newLignes.push({ designation: prescLabel('traitements', t).toUpperCase(), reference: '', type: 'traitement', montant: price });
+      });
+      if (newLignes.length === 0) { toast('Aucune prestation tarifée dans la prescription', 'error'); return; }
+      const hasOnlyEmpty = factureLignes.length === 1 && !factureLignes[0].designation && !Number(factureLignes[0].montant);
+      factureLignes = hasOnlyEmpty ? newLignes : [...factureLignes, ...newLignes];
+      renderLignes();
+      toast(`${newLignes.length} ligne(s) importée(s)`);
+    }
     function finalizeConsultation() { toast('stub finalize'); }
 
     // ========================================================== //
