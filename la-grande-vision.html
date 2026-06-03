@@ -3448,7 +3448,7 @@
         .sort((a, b) => (a.date_facture || '').localeCompare(b.date_facture || ''))
         .map(f => {
           const c = findClient(f.client_id);
-          const nom = c ? `${c.nom} ${c.prenom || ''}`.trim() : '';
+          const nom = c ? `${(c.nom || '').toUpperCase()} ${c.prenom || ''}`.trim() : '';
           return [
             f.numero || '',
             f.date_facture || '',
