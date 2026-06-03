@@ -1,0 +1,13 @@
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Éditeurs
+.vscode/
+.idea/
+
+# Sauvegardes de données exportées depuis l'app (ne pas versionner les données clients)
+sauvegarde-grande-vision-*.json
+securite-avant-import-*.json
+factures-grande-vision-*.csv
