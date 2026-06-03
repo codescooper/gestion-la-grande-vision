@@ -3372,7 +3372,7 @@
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      localStorage.setItem('lgv_last_backup', new Date().toISOString());
+      localStorage.setItem('lgv_last_backup', new Date().toISOString()); // trace la date de dernière sauvegarde
     }
 
     function exportData() {
@@ -3381,8 +3381,9 @@
       toast('Sauvegarde exportée');
     }
 
+    // Migration ascendante : complète parsed.data.settings en place (et renvoie parsed).
     function migrateBackup(parsed) {
-      const s = parsed.data.settings;
+      const s = parsed && parsed.data && parsed.data.settings;
       if (s && typeof s === 'object') {
         if (!s.prices) s.prices = JSON.parse(JSON.stringify(DEFAULT_PRICES));
         for (const g in DEFAULT_PRICES) {
@@ -3423,9 +3424,9 @@
           return;
         }
 
-        const dateLabel2 = parsed.exported_at ? fmtDate(parsed.exported_at) : 'inconnue';
+        const dateLabel = parsed.exported_at ? fmtDate(parsed.exported_at) : 'inconnue';
         const ok = confirm(
-          `Importer cette sauvegarde du ${dateLabel2} ?\n\n` +
+          `Importer cette sauvegarde du ${dateLabel} ?\n\n` +
           `• ${d.clients.length} client(s)\n` +
           `• ${d.prescriptions.length} prescription(s)\n` +
           `• ${d.factures.length} facture(s)\n\n` +
@@ -3435,8 +3436,8 @@
         if (!ok) { input.value = ''; return; }
 
         // Sauvegarde de sécurité AVANT écrasement
-        const today2 = new Date().toISOString().split('T')[0];
-        downloadBackup(buildBackupPayload(), `securite-avant-import-${today2}.json`);
+        const today = new Date().toISOString().split('T')[0];
+        downloadBackup(buildBackupPayload(), `securite-avant-import-${today}.json`);
 
         // Migration ascendante du fichier importé
         migrateBackup(parsed);
