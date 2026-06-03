@@ -3829,17 +3829,12 @@
     function validateConsultStep(step) {
       const c = consultation;
       if (step === 1) {
-        const hasDom = document.getElementById('cons_client') || document.getElementById('cons_c_nom');
-        if (hasDom) {
-          if (c.clientMode === 'existing' && !c.clientId) { toast('Sélectionnez un client', 'error'); return false; }
-          if (c.clientMode === 'new' && !c.newClient.nom) { toast('Le nom du client est obligatoire', 'error'); return false; }
-        }
+        if (c.clientMode === 'existing' && !c.clientId) { toast('Sélectionnez un client', 'error'); return false; }
+        if (c.clientMode === 'new' && !c.newClient.nom) { toast('Le nom du client est obligatoire', 'error'); return false; }
       }
       if (step === 3) {
-        if (document.getElementById('lignesContainer')) {
-          const valid = factureLignes.filter(l => l.designation && l.designation.trim() && Number(l.montant) > 0);
-          if (valid.length === 0) { toast('Ajoutez au moins une ligne avec désignation et montant', 'error'); return false; }
-        }
+        const valid = factureLignes.filter(l => l.designation && l.designation.trim() && Number(l.montant) > 0);
+        if (valid.length === 0) { toast('Ajoutez au moins une ligne avec désignation et montant', 'error'); return false; }
       }
       if (step === 4) {
         const t = document.getElementById('cons_v_toggle');
