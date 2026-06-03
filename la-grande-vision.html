@@ -4066,10 +4066,19 @@
     function finalizeConsultation() {
       const c = consultation;
 
-      // 1. Client
-      let clientId;
+      // --- Validation complète AVANT toute écriture (évite les enregistrements orphelins) ---
       if (c.clientMode === 'new') {
         if (!c.newClient.nom) { toast('Le nom du client est obligatoire', 'error'); goToConsultStep(1); return; }
+      } else if (!c.clientId) {
+        toast('Sélectionnez un client', 'error'); goToConsultStep(1); return;
+      }
+      const validLignes = (c.lignes || []).filter(l => l.designation && l.designation.trim() && Number(l.montant) > 0);
+      if (validLignes.length === 0) { toast('Le devis doit contenir au moins une ligne', 'error'); goToConsultStep(3); return; }
+      const total = validLignes.reduce((s, l) => s + (Number(l.montant) || 0), 0);
+
+      // --- 1. Client ---
+      let clientId;
+      if (c.clientMode === 'new') {
         clientId = DB.uid();
         clients.push({
           id: clientId,
@@ -4083,11 +4092,10 @@
         });
         DB.set('lgv_clients', clients);
       } else {
-        if (!c.clientId) { toast('Sélectionnez un client', 'error'); goToConsultStep(1); return; }
         clientId = c.clientId;
       }
 
-      // 2. Prescription (uniquement si renseignée)
+      // --- 2. Prescription (uniquement si renseignée) ---
       const p = c.presc;
       const cp = currentPrescState;
       const hasPresc =
@@ -4109,11 +4117,7 @@
         DB.set('lgv_prescriptions', prescriptions);
       }
 
-      // 3. Facture
-      const validLignes = (c.lignes || []).filter(l => l.designation && l.designation.trim() && Number(l.montant) > 0);
-      if (validLignes.length === 0) { toast('Le devis doit contenir au moins une ligne', 'error'); goToConsultStep(3); return; }
-      const total = validLignes.reduce((s, l) => s + (Number(l.montant) || 0), 0);
-
+      // --- 3. Facture ---
       let assurance = null;
       if (c.assuranceId) {
         const a = findInsurance(c.assuranceId);
@@ -4122,7 +4126,6 @@
           assurance = { id: a.id, nom: a.nom, couverture_pct: a.couverture, montant_couvert: covered, montant_patient: total - covered };
         }
       }
-
       const factureId = DB.uid();
       const versements = [];
       if (c.withVersement && Number(c.versement.montant) > 0) {
@@ -4131,12 +4134,11 @@
           date: c.versement.date,
           montant: parseInt(c.versement.montant, 10) || 0,
           mode: c.versement.mode,
-          reference: c.versement.reference,
-          notes: c.versement.notes,
+          reference: (c.versement.reference || '').trim(),
+          notes: (c.versement.notes || '').trim(),
           created_at: new Date().toISOString()
         });
       }
-
       factures.push({
         id: factureId,
         numero: nextFactureNumero(),
@@ -4158,11 +4160,12 @@
       });
       DB.set('lgv_factures', factures);
 
-      // 4. PDF + reset + redirection
+      // --- 4. PDF + reset + redirection ---
       generatePDF(factureId);
       toast('Consultation finalisée ✓');
       consultation = null;
       renderDashboard();
+      renderClients();
       navTo('factures');
     }
 
