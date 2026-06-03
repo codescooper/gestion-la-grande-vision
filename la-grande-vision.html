@@ -3956,8 +3956,78 @@
         </div>
       `;
     }
-    function consultStep4() { return '<div class="card">Étape 4 (stub)</div>'; }
-    function consultStep5() { return '<div class="card">Étape 5 (stub)</div>'; }
+    function consultStep4() {
+      const c = consultation;
+      const total = (c.lignes || []).reduce((s, l) => s + (Number(l.montant) || 0), 0);
+      const ins = c.assuranceId ? findInsurance(c.assuranceId) : null;
+      const patient = ins ? total - Math.round(total * ins.couverture / 100) : total;
+      const v = c.versement;
+      const modeOpts = PAYMENT_MODES.map(m => `<option value="${m.value}" ${v.mode === m.value ? 'selected' : ''}>${m.label}</option>`).join('');
+      return `
+        <div class="card">
+          <div class="card-header"><h3>Étape 4 — Acompte <span style="color:var(--lgv-haze);font-weight:400;font-size:12px;">(optionnel)</span></h3></div>
+          <label class="consult-toggle">
+            <input type="checkbox" id="cons_v_toggle" ${c.withVersement ? 'checked' : ''} onchange="captureConsultStep(4); renderConsultStep();">
+            Enregistrer un acompte maintenant
+          </label>
+          <p style="color:var(--lgv-haze);font-size:12px;margin:.5rem 0 1rem;">Part à régler par le patient : <strong>${fmtFCFA(patient)}</strong> (total ${fmtFCFA(total)})</p>
+          ${c.withVersement ? `
+            <div class="form-grid">
+              <div class="form-group"><label>Montant (FCFA) <span class="req">*</span></label><input type="number" id="cons_v_montant" min="0" step="1" value="${escapeHtml(v.montant)}" placeholder="0"></div>
+              <div class="form-group"><label>Date</label><input type="date" id="cons_v_date" value="${escapeHtml(v.date)}"></div>
+            </div>
+            <div class="form-grid">
+              <div class="form-group"><label>Mode</label><select id="cons_v_mode">${modeOpts}</select></div>
+              <div class="form-group"><label>Référence</label><input type="text" id="cons_v_reference" value="${escapeHtml(v.reference)}" placeholder="N° chèque, transaction…"></div>
+            </div>
+            <div class="form-group"><label>Notes</label><textarea id="cons_v_notes" placeholder="—">${escapeHtml(v.notes)}</textarea></div>
+          ` : ''}
+        </div>
+      `;
+    }
+    function consultStep5() {
+      const c = consultation;
+      let clientLabel;
+      if (c.clientMode === 'existing') {
+        const cl = findClient(c.clientId);
+        clientLabel = cl ? `${escapeHtml(cl.nom)} ${escapeHtml(cl.prenom || '')}` : '—';
+      } else {
+        clientLabel = `${escapeHtml(c.newClient.nom)} ${escapeHtml(c.newClient.prenom || '')} <span class="badge badge-blue">nouveau</span>`;
+      }
+      const specs = formatPrescSpecs({
+        type_verre: currentPrescState.type_verre,
+        materiau: currentPrescState.materiau,
+        coloration: currentPrescState.coloration,
+        traitements: currentPrescState.traitements
+      });
+      const validLignes = (c.lignes || []).filter(l => l.designation && l.designation.trim() && Number(l.montant) > 0);
+      const total = validLignes.reduce((s, l) => s + (Number(l.montant) || 0), 0);
+      const ins = c.assuranceId ? findInsurance(c.assuranceId) : null;
+      const covered = ins ? Math.round(total * ins.couverture / 100) : 0;
+      const patient = total - covered;
+      const acompte = (c.withVersement && Number(c.versement.montant) > 0) ? parseInt(c.versement.montant, 10) : 0;
+      const reste = Math.max(0, patient - acompte);
+      return `
+        <div class="card">
+          <div class="card-header"><h3>Étape 5 — Récapitulatif</h3></div>
+          <div class="recap-row"><span>Client</span><strong>${clientLabel}</strong></div>
+          ${specs.length ? `<div class="recap-row"><span>Prescription</span><span>${specs.map(s => `<span class="spec-pill">${escapeHtml(s)}</span>`).join(' ')}</span></div>` : ''}
+          <table class="recap-table">
+            <thead><tr><th>Désignation</th><th class="numeric">Montant</th></tr></thead>
+            <tbody>${validLignes.map(l => `<tr><td>${escapeHtml(l.designation)}</td><td class="numeric">${fmtFCFA(l.montant)}</td></tr>`).join('')}</tbody>
+          </table>
+          <div class="recap-row"><span>Total</span><strong>${fmtFCFA(total)}</strong></div>
+          ${ins ? `
+            <div class="recap-row"><span>${escapeHtml(ins.nom)} couvre ${ins.couverture}%</span><span>− ${fmtFCFA(covered)}</span></div>
+            <div class="recap-row"><span>Part patient</span><strong>${fmtFCFA(patient)}</strong></div>
+          ` : ''}
+          ${acompte ? `
+            <div class="recap-row"><span>Acompte (${modeLabel(c.versement.mode)})</span><span>− ${fmtFCFA(acompte)}</span></div>
+            <div class="recap-row"><span>Reste à régler</span><strong>${fmtFCFA(reste)}</strong></div>
+          ` : ''}
+        </div>
+      `;
+    }
     function setConsultClientMode(mode) {
       captureConsultStep(1);
       consultation.clientMode = mode;
