@@ -1753,6 +1753,7 @@
     let clients = DB.get('lgv_clients');
     let prescriptions = DB.get('lgv_prescriptions');
     let factures = DB.get('lgv_factures');
+    let backupReminderDismissed = false;
 
     // ========== SETTINGS (prix par défaut & assurances) ==========
     const DEFAULT_PRICES = {
@@ -3250,6 +3251,7 @@
 
     // ========== SETTINGS PAGE ==========
     function renderSettings() {
+      const lastBackup = localStorage.getItem('lgv_last_backup');
       const container = document.getElementById('settingsContent');
       const groupLabels = {
         type_verre: 'Type de correction',
@@ -3269,7 +3271,7 @@
             (clients, prescriptions, factures et paramètres) pour la conserver en lieu sûr ou la transférer
             sur un autre poste.
             <br><span style="color:var(--lgv-haze);">État actuel : ${counts}</span>
-            <br><span style="color:var(--lgv-haze);">Dernière sauvegarde : ${localStorage.getItem('lgv_last_backup') ? fmtDate(localStorage.getItem('lgv_last_backup')) : 'jamais'}</span>
+            <br><span style="color:var(--lgv-haze);">Dernière sauvegarde : ${lastBackup ? fmtDate(lastBackup) : 'jamais'}</span>
           </p>
           <div style="display:flex;flex-wrap:wrap;gap:.625rem;">
             <button class="btn btn-secondary" type="button" onclick="exportData()">
@@ -3400,7 +3402,6 @@
     }
 
     // Migration ascendante : complète parsed.data.settings en place (et renvoie parsed).
-    let backupReminderDismissed = false;
 
     function checkBackupReminder() {
       const el = document.getElementById('backupReminder');
@@ -3409,10 +3410,10 @@
       const last = localStorage.getItem('lgv_last_backup');
       const stale = !last || (Date.now() - new Date(last).getTime()) > 7 * 24 * 60 * 60 * 1000;
       if (backupReminderDismissed || !hasData || !stale) {
-        el.classList.add('hidden'); el.innerHTML = ''; return;
+        el.classList.remove('backup-reminder'); el.classList.add('hidden'); el.innerHTML = ''; return;
       }
       el.classList.remove('hidden');
-      el.className = 'backup-reminder';
+      el.classList.add('backup-reminder');
       el.innerHTML = `
         <i data-lucide="shield-alert"></i>
         <span>Pensez à exporter une sauvegarde de vos données${last ? ' — dernière : ' + fmtDate(last) : ' — aucune sauvegarde enregistrée'}.</span>
@@ -3425,7 +3426,7 @@
     function dismissBackupReminder() {
       backupReminderDismissed = true;
       const el = document.getElementById('backupReminder');
-      if (el) { el.classList.add('hidden'); el.innerHTML = ''; }
+      if (el) { el.classList.remove('backup-reminder'); el.classList.add('hidden'); el.innerHTML = ''; }
     }
 
     function migrateBackup(parsed) {
@@ -3502,6 +3503,7 @@
 
         input.value = '';
         renderSettings();
+        checkBackupReminder();
         toast('Sauvegarde restaurée avec succès');
       };
       reader.onerror = () => {
