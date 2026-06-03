@@ -3436,7 +3436,9 @@
     }
 
     function csvCell(v) {
-      const s = String(v == null ? '' : v);
+      let s = String(v == null ? '' : v);
+      // Anti-injection de formule (Excel/Sheets) : neutralise les cellules débutant par = + - @ tab CR
+      if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
       return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
     }
 
