@@ -3457,7 +3457,7 @@
             nom,
             Number(f.total) || 0,
             f.assurance ? f.assurance.nom : '',
-            f.assurance ? f.assurance.couverture_pct : 0,
+            f.assurance ? f.assurance.couverture_pct + '%' : '',
             factureCouvert(f),
             facturePatientPart(f),
             versementsTotal(f),
@@ -3467,7 +3467,7 @@
           ];
         });
       const csv = [header, ...rows].map(r => r.map(csvCell).join(';')).join('\r\n');
-      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const today = new Date().toISOString().split('T')[0];
       const a = document.createElement('a');
