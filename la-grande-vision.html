@@ -4063,7 +4063,108 @@
       renderLignes();
       toast(`${newLignes.length} ligne(s) importée(s)`);
     }
-    function finalizeConsultation() { toast('stub finalize'); }
+    function finalizeConsultation() {
+      const c = consultation;
+
+      // 1. Client
+      let clientId;
+      if (c.clientMode === 'new') {
+        if (!c.newClient.nom) { toast('Le nom du client est obligatoire', 'error'); goToConsultStep(1); return; }
+        clientId = DB.uid();
+        clients.push({
+          id: clientId,
+          nom: c.newClient.nom.toUpperCase(),
+          prenom: c.newClient.prenom,
+          telephone: c.newClient.telephone,
+          email: c.newClient.email,
+          date_naissance: c.newClient.date_naissance,
+          notes: c.newClient.notes,
+          created_at: new Date().toISOString()
+        });
+        DB.set('lgv_clients', clients);
+      } else {
+        if (!c.clientId) { toast('Sélectionnez un client', 'error'); goToConsultStep(1); return; }
+        clientId = c.clientId;
+      }
+
+      // 2. Prescription (uniquement si renseignée)
+      const p = c.presc;
+      const cp = currentPrescState;
+      const hasPresc =
+        ['od_sph','od_cyl','od_axe','od_add','og_sph','og_cyl','og_axe','og_add','specs_libres'].some(k => (p[k] || '').trim())
+        || cp.type_verre || cp.materiau || cp.coloration || (cp.traitements && cp.traitements.length);
+      let prescriptionId = null;
+      if (hasPresc) {
+        prescriptionId = DB.uid();
+        prescriptions.push({
+          id: prescriptionId,
+          client_id: clientId,
+          date_consultation: p.date,
+          od_sph: p.od_sph, od_cyl: p.od_cyl, od_axe: p.od_axe, od_add: p.od_add,
+          og_sph: p.og_sph, og_cyl: p.og_cyl, og_axe: p.og_axe, og_add: p.og_add,
+          type_verre: cp.type_verre || '', materiau: cp.materiau || '', coloration: cp.coloration || '',
+          traitements: Array.isArray(cp.traitements) ? [...cp.traitements] : [],
+          specs_libres: p.specs_libres, notes: p.notes
+        });
+        DB.set('lgv_prescriptions', prescriptions);
+      }
+
+      // 3. Facture
+      const validLignes = (c.lignes || []).filter(l => l.designation && l.designation.trim() && Number(l.montant) > 0);
+      if (validLignes.length === 0) { toast('Le devis doit contenir au moins une ligne', 'error'); goToConsultStep(3); return; }
+      const total = validLignes.reduce((s, l) => s + (Number(l.montant) || 0), 0);
+
+      let assurance = null;
+      if (c.assuranceId) {
+        const a = findInsurance(c.assuranceId);
+        if (a) {
+          const covered = Math.round(total * a.couverture / 100);
+          assurance = { id: a.id, nom: a.nom, couverture_pct: a.couverture, montant_couvert: covered, montant_patient: total - covered };
+        }
+      }
+
+      const factureId = DB.uid();
+      const versements = [];
+      if (c.withVersement && Number(c.versement.montant) > 0) {
+        versements.push({
+          id: DB.uid(),
+          date: c.versement.date,
+          montant: parseInt(c.versement.montant, 10) || 0,
+          mode: c.versement.mode,
+          reference: c.versement.reference,
+          notes: c.versement.notes,
+          created_at: new Date().toISOString()
+        });
+      }
+
+      factures.push({
+        id: factureId,
+        numero: nextFactureNumero(),
+        client_id: clientId,
+        prescription_id: prescriptionId,
+        date_facture: todayISO(),
+        total: total,
+        statut: 'finalisee',
+        assurance: assurance,
+        lignes: validLignes.map(l => ({
+          designation: l.designation.trim(),
+          reference: (l.reference || '').trim(),
+          type: l.type || 'autre',
+          montant: parseInt(l.montant, 10) || 0
+        })),
+        versements: versements,
+        livraison: { livre: false },
+        created_at: new Date().toISOString()
+      });
+      DB.set('lgv_factures', factures);
+
+      // 4. PDF + reset + redirection
+      generatePDF(factureId);
+      toast('Consultation finalisée ✓');
+      consultation = null;
+      renderDashboard();
+      navTo('factures');
+    }
 
     // ========================================================== //
     // PDF GENERATION — LA GRANDE VISION (Nocturne · Bleu LGV)     //
