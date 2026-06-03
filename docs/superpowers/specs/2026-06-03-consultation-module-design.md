@@ -89,7 +89,10 @@ Nouvelle fonction `migrateBackup(parsed)` appelée dans `importData` juste aprè
 - **Sidebar** : nouvel item entre « Factures proforma » et la section Configuration :
   `<button class="nav-item" data-page="consultation" onclick="navTo('consultation')">` icône `clipboard-list`, libellé « Consultation ».
 - **Tableau de bord** : bouton « Nouvelle consultation » (en plus de « Nouveau client »).
-- `navTo('consultation')` appelle `renderConsultation()` qui **réinitialise** un brouillon neuf à chaque entrée depuis la nav (cf. état ci-dessous), puis rend l'étape courante.
+- **Démarrage / continuation** (règle retenue, sans perte de données) :
+  - Bouton « Nouvelle consultation » (dashboard) → `startConsultation()` : `consultation = null` puis `navTo('consultation')` → **brouillon neuf**.
+  - Item « Consultation » (sidebar) → `navTo('consultation')` → `renderConsultation()` **continue** le brouillon en cours s'il existe, sinon en crée un neuf.
+  - Le brouillon vit en mémoire : naviguer ailleurs puis revenir ne le détruit pas. Il n'est effacé que par la **finalisation** ou le bouton **« Annuler la consultation »** (confirm) dans l'en-tête du wizard.
 - Nouvelle section dans le HTML : `<section id="page-consultation" class="page hidden"> … </section>` avec un conteneur `#consultationContent`.
 - `navTo` : ajouter `if (page === 'consultation') renderConsultation();`.
 
@@ -115,7 +118,7 @@ function newConsultation() {
 }
 ```
 
-> **Abandon** : changer de page via la nav réinitialise le brouillon (avec confirm si des données ont été saisies). Aucun enregistrement orphelin.
+> **Abandon** : le bouton « Annuler la consultation » (confirm) remet `consultation = null` et renvoie au tableau de bord. Rien n'est persisté tant que la finalisation n'a pas eu lieu → aucun enregistrement orphelin.
 
 ## Stepper
 
