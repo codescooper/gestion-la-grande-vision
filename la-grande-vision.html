@@ -136,6 +136,11 @@
     .recap-table th, .recap-table td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--lgv-veil); font-size: 13px; }
     .recap-table .numeric { text-align: right; font-family: var(--lgv-font-mono); }
 
+    /* ===== Saisie en lot (numérisation annuaire) ===== */
+    .batch-grid { display: grid; grid-template-columns: 1.4fr 1.2fr 1.6fr 0.7fr 1.4fr auto; gap: 0.75rem; align-items: end; }
+    .batch-grid .form-group { margin: 0; }
+    @media (max-width: 900px) { .batch-grid { grid-template-columns: 1fr 1fr; } }
+
     /* ========================================================== */
     /* GLOWING RULE — brand signature                             */
     /* ========================================================== */
@@ -1965,6 +1970,28 @@
         'annulee':   '<span class="badge badge-danger">Annulée</span>'
       };
       return map[statut] || `<span class="badge badge-brouillon">${statut}</span>`;
+    }
+
+    function sexeLabel(s) {
+      return s === 'M' ? 'Homme' : s === 'F' ? 'Femme' : s === 'autre' ? 'Autre' : '—';
+    }
+    // Boutons sexe partagés (modale client + saisie en lot) : écrit dans un input caché
+    function setSexe(inputId, value, btn) {
+      const input = document.getElementById(inputId);
+      if (!input) return;
+      const next = input.value === value ? '' : value; // re-cliquer désélectionne
+      input.value = next;
+      btn.parentElement.querySelectorAll('.pill-opt').forEach(b => b.classList.remove('active'));
+      if (next) btn.classList.add('active');
+    }
+    function sexePills(inputId, current) {
+      return `
+        <input type="hidden" id="${inputId}" value="${escapeHtml(current || '')}">
+        <div class="pill-select">
+          <button type="button" class="pill-opt ${current === 'M' ? 'active' : ''}" onclick="setSexe('${inputId}','M',this)">Homme</button>
+          <button type="button" class="pill-opt ${current === 'F' ? 'active' : ''}" onclick="setSexe('${inputId}','F',this)">Femme</button>
+          <button type="button" class="pill-opt ${current === 'autre' ? 'active' : ''}" onclick="setSexe('${inputId}','autre',this)">Autre</button>
+        </div>`;
     }
 
     function escapeHtml(str) {
