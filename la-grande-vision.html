@@ -1721,10 +1721,16 @@
             <h2 class="page-title">Vos <span class="blue">clients</span></h2>
             <p class="page-sub" id="clientsCount">0 client(s)</p>
           </div>
-          <button class="btn btn-primary" onclick="openModal('client')">
-            <i data-lucide="plus"></i>
-            Nouveau client
-          </button>
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+            <button class="btn btn-secondary" onclick="openBatchClients()">
+              <i data-lucide="users"></i>
+              Saisie en lot
+            </button>
+            <button class="btn btn-primary" onclick="openModal('client')">
+              <i data-lucide="plus"></i>
+              Nouveau client
+            </button>
+          </div>
         </div>
         <div class="glow-rule page-rule"></div>
         <div class="search-bar">
@@ -1732,6 +1738,22 @@
           <i data-lucide="search" class="search-icon"></i>
         </div>
         <div id="clientsList"></div>
+      </section>
+
+      <section id="page-batch-clients" class="page hidden">
+        <div class="page-header">
+          <div>
+            <div class="eyebrow">Clients</div>
+            <h2 class="page-title">Saisie en <span class="blue">lot</span></h2>
+            <p class="page-sub">Numérisez l'annuaire : un client par ligne, enregistré aussitôt</p>
+          </div>
+          <button class="btn btn-tertiary" onclick="navTo('clients')">
+            <i data-lucide="check"></i>
+            Terminer
+          </button>
+        </div>
+        <div class="glow-rule page-rule"></div>
+        <div id="batchContent"></div>
       </section>
 
       <section id="page-factures" class="page hidden">
