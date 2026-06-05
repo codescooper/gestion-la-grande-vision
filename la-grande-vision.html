@@ -2639,8 +2639,8 @@
           <tbody>${list.map(c => `<tr>
             <td><strong style="color:var(--lgv-bone);">${escapeHtml(c.nom)}</strong></td>
             <td>${escapeHtml(c.prenom || '')}</td>
-            <td>${sexeLabel(c.sexe)}</td>
-            <td class="numeric">${c.age === '' || c.age == null ? '—' : c.age}</td>
+            <td>${escapeHtml(sexeLabel(c.sexe))}</td>
+            <td class="numeric">${c.age === '' || c.age == null ? '—' : escapeHtml(String(c.age))}</td>
             <td>${escapeHtml(c.telephone || '—')}</td>
             <td>${c.date_enregistrement ? fmtDate(c.date_enregistrement) : '—'}</td>
             <td class="actions"><button class="btn btn-tertiary btn-sm" onclick="removeBatchClient('${c.id}')">Retirer</button></td>
@@ -2726,11 +2726,11 @@
               <div class="info-grid">
                 <div class="info-item">
                   <div class="info-label">Sexe</div>
-                  <div class="info-value">${sexeLabel(c.sexe)}</div>
+                  <div class="info-value">${escapeHtml(sexeLabel(c.sexe))}</div>
                 </div>
                 <div class="info-item">
                   <div class="info-label">Âge</div>
-                  <div class="info-value">${c.age === '' || c.age == null ? '—' : c.age}</div>
+                  <div class="info-value">${c.age === '' || c.age == null ? '—' : escapeHtml(String(c.age))}</div>
                 </div>
                 <div class="info-item">
                   <div class="info-label">Téléphone</div>
