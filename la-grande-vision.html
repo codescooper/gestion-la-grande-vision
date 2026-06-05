@@ -1827,7 +1827,14 @@
         try { return JSON.parse(localStorage.getItem(key)) || []; }
         catch (e) { return []; }
       },
-      set(key, val) { localStorage.setItem(key, JSON.stringify(val)); },
+      set(key, val) {
+        localStorage.setItem(key, JSON.stringify(val));
+        // Déclenche une sauvegarde automatique (différée) après toute mutation de données
+        if (typeof scheduleAutoBackup === 'function' &&
+            (key === 'lgv_clients' || key === 'lgv_prescriptions' || key === 'lgv_factures' || key === 'lgv_settings')) {
+          scheduleAutoBackup();
+        }
+      },
       uid() { return 'id_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9); }
     };
 
@@ -1945,7 +1952,9 @@
       }
     }
 
-    seedData();
+    // Données de démonstration : uniquement sur demande explicite (la-grande-vision.html?demo).
+    // À l'installation chez le client, l'application démarre à vide.
+    if (new URLSearchParams(location.search).has('demo')) seedData();
 
     // ========== UTILS ==========
     function fmtFCFA(n) {
@@ -3555,6 +3564,7 @@
 
       container.innerHTML = `<div class="settings-grid">
         ${backupHtml}
+        ${autoBackupStatusHtml()}
         ${insurancesHtml}
         ${Object.keys(DEFAULT_PRICES).map(group => `
           <div class="card">
@@ -5055,11 +5065,161 @@
       doc.save(`${blNum}_${nomClient}.pdf`);
     }
 
+    // ========== SAUVEGARDE AUTOMATIQUE (dossier choisi — File System Access API) ==========
+    // `var` (et non `let`) : portée globale volontaire pour rester accessible aux fonctions hoistées.
+    var autoBackupHandle = null;
+    var autoBackupTimer = null;
+    const AUTO_BACKUP_FILENAME = 'sauvegarde-grande-vision-auto.json';
+
+    // --- Persistance du handle de dossier dans IndexedDB (un FileSystemDirectoryHandle est clonable) ---
+    function idbOpen() {
+      return new Promise((res, rej) => {
+        const r = indexedDB.open('lgv_backup', 1);
+        r.onupgradeneeded = () => { r.result.createObjectStore('handles'); };
+        r.onsuccess = () => res(r.result);
+        r.onerror = () => rej(r.error);
+      });
+    }
+    async function idbSetHandle(handle) {
+      const db = await idbOpen();
+      return new Promise((res, rej) => {
+        const tx = db.transaction('handles', 'readwrite');
+        tx.objectStore('handles').put(handle, 'dir');
+        tx.oncomplete = () => res();
+        tx.onerror = () => rej(tx.error);
+      });
+    }
+    async function idbGetHandle() {
+      const db = await idbOpen();
+      return new Promise((res) => {
+        const tx = db.transaction('handles', 'readonly');
+        const g = tx.objectStore('handles').get('dir');
+        g.onsuccess = () => res(g.result || null);
+        g.onerror = () => res(null);
+      });
+    }
+
+    function autoBackupSupported() { return typeof window.showDirectoryPicker === 'function'; }
+
+    // Écrit la sauvegarde dans le dossier choisi. `manual=true` autorise la demande d'autorisation (geste utilisateur).
+    async function writeAutoBackup(manual) {
+      if (!autoBackupHandle) { if (manual) toast('Aucun dossier de sauvegarde sélectionné', 'error'); return false; }
+      try {
+        let perm = await autoBackupHandle.queryPermission({ mode: 'readwrite' });
+        if (perm !== 'granted') {
+          if (manual) {
+            perm = await autoBackupHandle.requestPermission({ mode: 'readwrite' });
+            if (perm !== 'granted') { toast('Autorisation du dossier requise', 'error'); return false; }
+          } else {
+            return false; // pas de geste utilisateur : on n'écrit pas sans permission accordée
+          }
+        }
+        const fh = await autoBackupHandle.getFileHandle(AUTO_BACKUP_FILENAME, { create: true });
+        const w = await fh.createWritable();
+        await w.write(JSON.stringify(buildBackupPayload(), null, 2));
+        await w.close();
+        const now = new Date().toISOString();
+        localStorage.setItem('lgv_last_backup', now);
+        localStorage.setItem('lgv_last_autobackup', now);
+        if (manual) { toast('Sauvegarde effectuée'); }
+        refreshAutoBackupStatus();
+        return true;
+      } catch (e) {
+        if (manual) toast('Échec de la sauvegarde automatique', 'error');
+        return false;
+      }
+    }
+
+    function scheduleAutoBackup() {
+      if (!autoBackupHandle) return;
+      clearTimeout(autoBackupTimer);
+      autoBackupTimer = setTimeout(() => { writeAutoBackup(false); }, 2500);
+    }
+
+    async function chooseBackupFolder() {
+      if (!autoBackupSupported()) { toast('Navigateur non compatible — utilisez l\'export manuel', 'error'); return; }
+      try {
+        const handle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'lgv-backup' });
+        const perm = await handle.requestPermission({ mode: 'readwrite' });
+        if (perm !== 'granted') { toast('Autorisation refusée', 'error'); return; }
+        autoBackupHandle = handle;
+        await idbSetHandle(handle);
+        await writeAutoBackup(true);
+        toast('Sauvegarde automatique activée');
+        refreshAutoBackupStatus();
+      } catch (e) {
+        if (e && e.name === 'AbortError') return; // l'utilisateur a annulé le sélecteur
+        toast('Impossible d\'activer la sauvegarde automatique', 'error');
+      }
+    }
+
+    async function disableAutoBackup() {
+      if (!confirm('Désactiver la sauvegarde automatique vers le dossier ?')) return;
+      autoBackupHandle = null;
+      try { await idbSetHandle(null); } catch (e) {}
+      toast('Sauvegarde automatique désactivée');
+      refreshAutoBackupStatus();
+    }
+
+    function autoBackupStatusHtml() {
+      const lastAuto = localStorage.getItem('lgv_last_autobackup');
+      const active = !!autoBackupHandle;
+      const name = active ? (autoBackupHandle.name || 'dossier choisi') : '';
+      if (!autoBackupSupported()) {
+        return `
+          <div class="card" style="grid-column: 1 / -1;">
+            <div class="card-header"><h3>Sauvegarde automatique</h3></div>
+            <p style="color:var(--lgv-warning);font-size:13px;line-height:1.6;">
+              Ce navigateur ne gère pas la sauvegarde automatique vers un dossier.
+              Utilisez l'export manuel ci-dessus (Chrome ou Edge recommandés).
+            </p>
+          </div>`;
+      }
+      return `
+        <div class="card" style="grid-column: 1 / -1;">
+          <div class="card-header"><h3>Sauvegarde automatique</h3></div>
+          <p style="color:var(--lgv-mist);font-size:13px;line-height:1.6;margin-bottom:1rem;">
+            Choisissez un dossier (idéalement un dossier synchronisé <strong>OneDrive</strong> ou <strong>Google Drive</strong>) :
+            l'application y réécrira automatiquement une sauvegarde à chaque modification.
+            <br><span style="color:var(--lgv-haze);">État : ${active ? '✅ active — dossier : <strong>' + escapeHtml(name) + '</strong>' : '⚠️ inactive'}</span>
+            ${active ? `<br><span style="color:var(--lgv-haze);">Dernière sauvegarde auto : ${lastAuto ? fmtDate(lastAuto) : '—'}</span>` : ''}
+          </p>
+          <div style="display:flex;flex-wrap:wrap;gap:.625rem;">
+            <button class="btn btn-primary" type="button" onclick="chooseBackupFolder()">
+              <i data-lucide="folder-check"></i> ${active ? 'Changer de dossier' : 'Choisir un dossier de sauvegarde'}
+            </button>
+            ${active ? `
+              <button class="btn btn-secondary" type="button" onclick="writeAutoBackup(true)">
+                <i data-lucide="save"></i> Sauvegarder maintenant
+              </button>
+              <button class="btn btn-tertiary" type="button" onclick="disableAutoBackup()">
+                <i data-lucide="x"></i> Désactiver
+              </button>` : ''}
+          </div>
+          ${active ? '' : `<p style="color:var(--lgv-haze);font-size:12px;margin-top:.75rem;">Tant que ce n'est pas activé, seul l'export manuel protège vos données.</p>`}
+        </div>`;
+    }
+
+    function refreshAutoBackupStatus() {
+      const page = document.getElementById('page-settings');
+      if (page && !page.classList.contains('hidden')) renderSettings();
+    }
+
+    async function initAutoBackup() {
+      try { const h = await idbGetHandle(); if (h) autoBackupHandle = h; } catch (e) {}
+      refreshAutoBackupStatus();
+    }
+
     // ========== INIT ==========
     updateOnlineStatus();
     renderDashboard();
     checkBackupReminder();
     refreshIcons();
+    initAutoBackup();
+    // Sauvegarde de sécurité lorsque l'onglet passe en arrière-plan / se ferme
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') writeAutoBackup(false);
+    });
   </script>
 </body>
 </html>
