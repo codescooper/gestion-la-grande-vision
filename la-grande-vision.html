@@ -2542,6 +2542,109 @@
     }
 
     // ========== MODAL VIEW CLIENT ==========
+    // ========== SAISIE EN LOT (numérisation annuaire) ==========
+    let batchSessionIds = []; // clients ajoutés pendant la session courante
+
+    function openBatchClients() {
+      batchSessionIds = [];
+      document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+      document.getElementById('page-batch-clients').classList.remove('hidden');
+      renderBatchClients();
+    }
+
+    function renderBatchClients() {
+      document.getElementById('batchContent').innerHTML = `
+        <div class="card">
+          <div class="form-group" style="max-width:280px;">
+            <label>Date de réception <span style="color:var(--lgv-haze);font-weight:400;">(facultative)</span></label>
+            <input type="date" id="batch_date">
+            <p style="color:var(--lgv-haze);font-size:12px;margin-top:.4rem;">Appliquée à chaque client saisi. Laissez vide si la date est inconnue.</p>
+          </div>
+        </div>
+        <div class="card section-spacer">
+          <div class="card-header"><h3>Nouveau client</h3></div>
+          <div class="batch-grid">
+            <div class="form-group"><label>Nom <span class="req">*</span></label><input type="text" id="batch_nom" placeholder="OUATTARA" onkeydown="batchKey(event)"></div>
+            <div class="form-group"><label>Prénom</label><input type="text" id="batch_prenom" placeholder="Drissa" onkeydown="batchKey(event)"></div>
+            <div class="form-group"><label>Sexe</label>${sexePills('batch_sexe','')}</div>
+            <div class="form-group"><label>Âge</label><input type="number" min="0" id="batch_age" placeholder="42" onkeydown="batchKey(event)"></div>
+            <div class="form-group"><label>Contact</label><input type="text" id="batch_contact" placeholder="+225 07 00 00 00 00" onkeydown="batchKey(event)"></div>
+            <button class="btn btn-primary" type="button" onclick="addBatchClient()"><i data-lucide="plus"></i> Ajouter</button>
+          </div>
+          <p style="color:var(--lgv-haze);font-size:12px;margin-top:.6rem;">Astuce : appuyez sur <strong>Entrée</strong> pour enregistrer et passer au client suivant.</p>
+        </div>
+        <div class="card section-spacer">
+          <div class="card-header"><h3>Saisis cette session (<span id="batchCount">0</span>)</h3></div>
+          <div id="batchSessionList"></div>
+        </div>`;
+      renderBatchSessionList();
+      refreshIcons();
+      document.getElementById('batch_nom').focus();
+    }
+
+    function batchKey(e) { if (e.key === 'Enter') { e.preventDefault(); addBatchClient(); } }
+
+    function addBatchClient() {
+      const v = id => (document.getElementById(id) ? document.getElementById(id).value : '');
+      const nom = v('batch_nom').trim();
+      if (!nom) { toast('Le nom est obligatoire', 'error'); document.getElementById('batch_nom').focus(); return; }
+      const ageRaw = v('batch_age').trim();
+      const age = ageRaw === '' ? '' : (parseInt(ageRaw, 10) || '');
+      const client = {
+        id: DB.uid(),
+        nom: nom.toUpperCase(),
+        prenom: v('batch_prenom').trim(),
+        sexe: v('batch_sexe'),
+        age: age,
+        telephone: v('batch_contact').trim(),
+        email: '',
+        date_naissance: '',
+        date_enregistrement: v('batch_date'),
+        notes: '',
+        created_at: new Date().toISOString()
+      };
+      clients.push(client);
+      DB.set('lgv_clients', clients);
+      batchSessionIds.push(client.id);
+      // reset de la ligne (on garde la date partagée)
+      ['batch_nom', 'batch_prenom', 'batch_age', 'batch_contact'].forEach(i => { document.getElementById(i).value = ''; });
+      document.getElementById('batch_sexe').value = '';
+      document.querySelectorAll('#batchContent .pill-opt').forEach(b => b.classList.remove('active'));
+      renderBatchSessionList();
+      toast(`${client.nom} enregistré`);
+      document.getElementById('batch_nom').focus();
+    }
+
+    function renderBatchSessionList() {
+      const list = batchSessionIds.map(findClient).filter(Boolean).reverse(); // plus récent en haut
+      document.getElementById('batchCount').textContent = list.length;
+      const el = document.getElementById('batchSessionList');
+      if (!list.length) { el.innerHTML = `<p style="color:var(--lgv-haze);font-size:13px;">Aucun client saisi pour l'instant.</p>`; return; }
+      el.innerHTML = `
+        <div class="table-wrapper"><table>
+          <thead><tr><th>Nom</th><th>Prénom</th><th>Sexe</th><th class="numeric">Âge</th><th>Contact</th><th>Date</th><th class="actions">Action</th></tr></thead>
+          <tbody>${list.map(c => `<tr>
+            <td><strong style="color:var(--lgv-bone);">${escapeHtml(c.nom)}</strong></td>
+            <td>${escapeHtml(c.prenom || '')}</td>
+            <td>${sexeLabel(c.sexe)}</td>
+            <td class="numeric">${c.age === '' || c.age == null ? '—' : c.age}</td>
+            <td>${escapeHtml(c.telephone || '—')}</td>
+            <td>${c.date_enregistrement ? fmtDate(c.date_enregistrement) : '—'}</td>
+            <td class="actions"><button class="btn btn-tertiary btn-sm" onclick="removeBatchClient('${c.id}')">Retirer</button></td>
+          </tr>`).join('')}</tbody>
+        </table></div>`;
+      refreshIcons();
+    }
+
+    function removeBatchClient(id) {
+      if (!confirm('Retirer ce client de la base ?')) return;
+      clients = clients.filter(c => c.id !== id);
+      DB.set('lgv_clients', clients);
+      batchSessionIds = batchSessionIds.filter(x => x !== id);
+      renderBatchSessionList();
+      toast('Client retiré');
+    }
+
     function modalViewClient(id) {
       const c = findClient(id);
       if (!c) return;
