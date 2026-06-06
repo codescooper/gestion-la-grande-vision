@@ -64,6 +64,7 @@ try {
 }
 
 $rootFull = [System.IO.Path]::GetFullPath($root)
+$rootFullWithSep = $rootFull.TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
 
 Write-Host ""
 Write-Host "  La Grande Vision - serveur local actif" -ForegroundColor Cyan
@@ -91,14 +92,25 @@ while ($listener.IsListening) {
       continue
     }
 
+    # Defense en profondeur (anti DNS-rebinding) : n'accepter que l'hote local.
+    # Le prefixe "localhost" de HttpListener le garantit deja, on le revalide explicitement.
+    $hostHeader = ($req.UserHostName -split ':')[0]
+    if ($hostHeader -ne 'localhost' -and $hostHeader -ne '127.0.0.1') {
+      $resp.StatusCode = 403
+      $resp.Close()
+      continue
+    }
+
     $relPath = [System.Uri]::UnescapeDataString($req.Url.AbsolutePath)
     if ([string]::IsNullOrEmpty($relPath) -or $relPath -eq '/') { $relPath = "/$appFile" }
 
     $candidate = Join-Path $root ($relPath.TrimStart('/').Replace('/', [System.IO.Path]::DirectorySeparatorChar))
     $fullPath  = [System.IO.Path]::GetFullPath($candidate)
 
-    # Anti-traversal : le fichier doit rester dans le dossier de l'application
-    if (-not $fullPath.StartsWith($rootFull, [System.StringComparison]::OrdinalIgnoreCase)) {
+    # Anti-traversal : le fichier doit rester DANS le dossier de l'application.
+    # On compare avec le separateur final pour eviter qu'un dossier voisin partageant
+    # le meme prefixe de nom (ex. "...vision-secret") ne soit accepte par erreur.
+    if (-not ($fullPath + [System.IO.Path]::DirectorySeparatorChar).StartsWith($rootFullWithSep, [System.StringComparison]::OrdinalIgnoreCase)) {
       $resp.StatusCode = 403
       $resp.Close()
       continue
