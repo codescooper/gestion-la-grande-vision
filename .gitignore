@@ -11,3 +11,7 @@ desktop.ini
 sauvegarde-grande-vision-*.json
 securite-avant-import-*.json
 factures-grande-vision-*.csv
+
+# Archive de livraison (générée, non versionnée)
+La-Grande-Vision-Installation.zip
+livraison/
